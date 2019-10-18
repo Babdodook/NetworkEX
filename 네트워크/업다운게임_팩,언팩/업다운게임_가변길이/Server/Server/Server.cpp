@@ -20,6 +20,56 @@ enum PROTOCOL
 	CLEAR
 };
 
+typedef struct clinetinfo {
+	SOCKET sock;
+	SOCKADDR_IN addr;
+	char buf[BUFSIZE];
+}_ClientInfo;
+
+_ClientInfo* ClientInfo[100];
+int Count = 0;
+
+_ClientInfo* AddClientInfo(SOCKET _sock, SOCKADDR_IN _addr)
+{
+	_ClientInfo* ptr = new _ClientInfo;
+	ZeroMemory(ptr, sizeof(_ClientInfo));
+
+	ptr->sock = _sock;
+	memcpy(&ptr->addr, &_addr, sizeof(SOCKADDR_IN));
+
+	printf("클라이언트 접속:%s :%d\n",
+		inet_ntoa(ptr->addr.sin_addr),
+		ntohs(ptr->addr.sin_port));
+
+	ClientInfo[Count++] = ptr;
+	return ptr;
+}
+
+void RemoveClientInfo(_ClientInfo* _ptr)
+{
+	closesocket(_ptr->sock);
+
+	printf("클라이언트 종료:%s :%d\n",
+		inet_ntoa(_ptr->addr.sin_addr),
+		ntohs(_ptr->addr.sin_port));
+
+	for (int i = 0; i < Count; i++)
+	{
+		if (ClientInfo[i] == _ptr)
+		{
+			delete ClientInfo[i];
+
+			for (int j = i; j < Count - 1; j++)
+			{
+				ClientInfo[j] = ClientInfo[j + 1];
+			}
+			ClientInfo[Count - 1] = nullptr;
+			break;
+		}
+	}
+
+	Count--;
+}
 
 int recvn(SOCKET sock, char* buf, int len, int flags)
 {
@@ -201,9 +251,7 @@ int main()
 			continue;
 		}
 
-		printf("클라이언트 접속:%s :%d\n",
-			inet_ntoa(clientaddr.sin_addr),
-			ntohs(clientaddr.sin_port));
+		_ClientInfo* ptr = AddClientInfo(client_sock, clientaddr);
 
 		int randnum = rand() % 100 + 1;
 		PROTOCOL protocol = INTRO;
@@ -214,9 +262,9 @@ int main()
 		while (1)
 		{
 			//패킹
-			int size = PackPacket(buf, protocol, msg);
+			int size = PackPacket(ptr->buf, protocol, msg);
 
-			retval = send(client_sock, buf, size, 0);
+			retval = send(ptr->sock, ptr->buf, size, 0);
 			if (retval == SOCKET_ERROR)
 			{
 				err_display("send()");
@@ -226,16 +274,16 @@ int main()
 			int answer = 0;
 
 			//패킷 받기
-			if (!PacketRecv(client_sock, buf))
+			if (!PacketRecv(ptr->sock, ptr->buf))
 			{
 				break;
 			}
 
 			//프로토콜 떼어내기
-			protocol = GetProtocol(buf);
+			protocol = GetProtocol(ptr->buf);
 
 			//언패킹
-			answer = UnPackPacket(buf);
+			answer = UnPackPacket(ptr->buf);
 
 			protocol = GAMEPLAY;
 			if (answer == randnum)
@@ -253,11 +301,7 @@ int main()
 			}
 		}
 
-		closesocket(client_sock);
-
-		printf("클라이언트 종료:%s :%d\n",
-			inet_ntoa(clientaddr.sin_addr),
-			ntohs(clientaddr.sin_port));
+		RemoveClientInfo(ptr);
 	}
 
 	closesocket(listen_sock);
