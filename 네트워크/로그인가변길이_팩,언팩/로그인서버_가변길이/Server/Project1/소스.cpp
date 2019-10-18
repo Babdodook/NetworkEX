@@ -32,6 +32,57 @@ enum PROTOCOL
 	LOGIN_RESULT
 };
 
+typedef struct clinetinfo {
+	SOCKET sock;
+	SOCKADDR_IN addr;
+	char buf[BUFSIZE];
+	_LoginInfo info;
+}_ClientInfo;
+
+_ClientInfo* ClientInfo[100];
+int Count = 0;
+
+_ClientInfo* AddClientInfo(SOCKET _sock, SOCKADDR_IN _addr)
+{
+	_ClientInfo* ptr = new _ClientInfo;
+	ZeroMemory(ptr, sizeof(_ClientInfo));
+
+	ptr->sock = _sock;
+	memcpy(&ptr->addr, &_addr, sizeof(SOCKADDR_IN));
+
+	printf("클라이언트 접속:%s :%d\n",
+		inet_ntoa(ptr->addr.sin_addr),
+		ntohs(ptr->addr.sin_port));
+
+	ClientInfo[Count++] = ptr;
+	return ptr;
+}
+
+void RemoveClientInfo(_ClientInfo* _ptr)
+{
+	closesocket(_ptr->sock);
+
+	printf("클라이언트 종료:%s :%d\n",
+		inet_ntoa(_ptr->addr.sin_addr),
+		ntohs(_ptr->addr.sin_port));
+
+	for (int i = 0; i < Count; i++)
+	{
+		if (ClientInfo[i] == _ptr)
+		{
+			delete ClientInfo[i];
+			
+			for (int j = i; j < Count - 1; j++)
+			{
+				ClientInfo[j] = ClientInfo[j + 1];
+			}
+			ClientInfo[Count - 1] = nullptr;
+			break;
+		}
+	}
+
+	Count--;
+}
 
 int recvn(SOCKET sock, char* buf, int len, int flags)
 {
@@ -247,27 +298,25 @@ int main()
 			continue;//break;
 		}
 
-		printf("클라이언트 접속:%s :%d\n",
-			inet_ntoa(clientaddr.sin_addr),
-			ntohs(clientaddr.sin_port));
+		_ClientInfo* ptr = AddClientInfo(client_sock, clientaddr);
 
 		while (1)
 		{
-			int size = PackPacket(buf, INTRO, INTRO_MSG);
+			int size = PackPacket(ptr->buf, INTRO, INTRO_MSG);
 			
-			retval = send(client_sock, buf, size, 0);
+			retval = send(ptr->sock, ptr->buf, size, 0);
 			if (retval == SOCKET_ERROR)
 			{
 				err_display("send()");
 				break;
 			}			
 
-			if (!PacketRecv(client_sock, buf))
+			if (!PacketRecv(ptr->sock, ptr->buf))
 			{
 				break;
 			}
 
-			PROTOCOL protocol = GetProtocol(buf);
+			PROTOCOL protocol = GetProtocol(ptr->buf);
 
 			_LoginInfo logininfo;
 			ZeroMemory(&logininfo, sizeof(_LoginInfo));
@@ -275,7 +324,7 @@ int main()
 			switch (protocol)
 			{
 			case LOGIN_INFO:
-				UnPackPacket(buf, logininfo.ID, logininfo.PW);
+				UnPackPacket(ptr->buf, logininfo.ID, logininfo.PW);
 				
 				break;
 			}
@@ -292,6 +341,7 @@ int main()
 					flag = true;
 					if (!strcmp(LoginInfo[i].PW, logininfo.PW))
 					{
+						memcpy(&ptr->info, &logininfo, sizeof(_LoginInfo));
 						result = LOGIN;
 						strcpy(msg, LOGIN_MSG);
 					}
@@ -309,9 +359,9 @@ int main()
 				strcpy(msg, ID_ERROR_MSG);
 			}
 
-			size = PackPacket(buf, LOGIN_RESULT, result, msg);
+			size = PackPacket(ptr->buf, LOGIN_RESULT, result, msg);
 			
-			retval = send(client_sock, buf, size, 0);
+			retval = send(ptr->sock, ptr->buf, size, 0);
 			if (retval == SOCKET_ERROR)
 			{
 				err_display("send()");
@@ -324,11 +374,7 @@ int main()
 			}
 		}
 
-		closesocket(client_sock);
-
-		printf("클라이언트 종료:%s :%d\n",
-			inet_ntoa(clientaddr.sin_addr),
-			ntohs(clientaddr.sin_port));
+		RemoveClientInfo(ptr);
 	}
 
 	closesocket(listen_sock);
