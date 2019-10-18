@@ -131,10 +131,10 @@ int PackPacket(char *buf, PROTOCOL protocol, char *msg)
 }
 
 //정답 언패킹
-int UnPackPacket(char *buf)
+int UnPackPacket(const char *buf)
 {
 	int data;
-	char* ptr = buf + sizeof(PROTOCOL);
+	const char* ptr = buf + sizeof(PROTOCOL);
 
 	memcpy(&data, ptr, sizeof(int));
 

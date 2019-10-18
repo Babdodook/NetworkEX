@@ -122,10 +122,10 @@ int PackPacket(char *buf, PROTOCOL protocol, int data)
 }
 
 //메시지 언패킹
-void UnPackPacket(char* buf, char *msg)
+void UnPackPacket(const char* buf, char *msg)
 {
 	int strsize = 0;
-	char* ptr = buf + sizeof(PROTOCOL);
+	const char* ptr = buf + sizeof(PROTOCOL);
 	
 	memcpy(&strsize, ptr, sizeof(int));
 	ptr = ptr + sizeof(int);
